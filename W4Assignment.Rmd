@@ -1,0 +1,32 @@
+---
+title: "W4Assignment"
+author: "7cats"
+date: "30/07/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+library(dplyr)
+```
+The data is stored in file "repdata_data_StormData.csv.bz2" and read into variable metaData
+```{r loading Data, cache = TRUE}
+metaData <- read.csv("repdata_data_StormData.csv.bz2")
+```
+
+Transforming the original date and time
+```{r processing date, cache = TRUE}
+metaData <- metaData %>%
+    mutate(stDatetemp = as.data.frame(t(as.data.frame(strsplit(metaData$BGN_DATE,' '))))$V1) %>%
+    mutate(stDate = as.Date(stDatetemp, format = '%m/%d/%Y'), stDatetemp = NULL) %>%
+    mutate(stTime = format(strptime(BGN_TIME, format="%H%M"), format = "%H:%M"), BGN_TIME = NULL)
+```
+Transformed start date is stored in variable stDate and start time in stTime
+
+Analyse the relationship between event type and population health
+```{r}
+
+
+
+```
