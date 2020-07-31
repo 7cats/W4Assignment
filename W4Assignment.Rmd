@@ -24,9 +24,33 @@ metaData <- metaData %>%
 ```
 Transformed start date is stored in variable stDate and start time in stTime
 
-Analyse the relationship between event type and population health
+First events with zero property/crop damage and fatalities/injuries are removed from the table for simplicity
 ```{r}
+metaData <- metaData %>%
+    mutate(damage = PROPDMG + FATALITIES + INJURIES + CROPDMG) %>%
+    .[-.$damage == 0,]
+```
 
+Analyse the relationship between event type and population health
+```{r reducing classes of event type}
+keyType <- paste( c("FLOOD","HEAT","COLD","WIND","ICE","STORM","RAIN","TIDE","FROST","SURF","FIRE","FOG","RIP CURRENT","SLIDE","DRY"),collapse = "|")
+metaData <- metaData %>%
+    mutate(EVTYPE = toupper(EVTYPE),
+           EVTYPE = str_replace_all(EVTYPE,"TSTM|THUNDERSTORM|TORNADO|TYPHOON|HURRICANE|TROPICAL STORM|FUNNEL CLOUD|DRY MICROBURST","STORM"),
+           EVTYPE = str_replace_all(EVTYPE,"WINDCHILL|WINTER WEATHER","COLD"),
+           EVTYPE = str_replace_all(EVTYPE,"FLD","FLOOD"),
+           EVTYPE = str_replace_all(EVTYPE,"AVALANCHE","SLIDE"),
+           EVTYPE = str_replace_all(EVTYPE,"HAIL|WINTER STORM|SLEET|SNOW|BLIZZARD|FREEZE|FROST","ICE"),
+           EVTYPE = ifelse(is.na(str_extract(EVTYPE,keyType)),EVTYPE,str_extract(EVTYPE,keyType)),
+           EVTYPE = str_replace_all(EVTYPE,"SURF|TIDE|STORM SURGE","HIGH WATER LEVEL"),
+    )
+```
+All weather phenomenons are reduced to 15 types: Flood, Heat, Cold, Wind, Ice, Storm, Rain, Tide, Frost, High Water Level, Fog, and Rip Current. The classification might be accurate but simply used as a method in this assignment. After classified, the data will be grouped and each group's relation with population damage will be analysed.
 
+```{r}
+metaData <- metaData %>%
+    group_by(EVTYPE) %>%
+    mean(FATALITIES)
 
 ```
+
