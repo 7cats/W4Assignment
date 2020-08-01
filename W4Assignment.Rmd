@@ -17,15 +17,6 @@ The data is stored in file "repdata_data_StormData.csv.bz2" and read into variab
 metaData <- read.csv("repdata_data_StormData.csv.bz2")
 ```
 
-Transforming the original date and time
-```{r processing date, cache = TRUE}
-metaData <- metaData %>%
-    mutate(stDatetemp = as.data.frame(t(as.data.frame(strsplit(metaData$BGN_DATE,' '))))$V1) %>%
-    mutate(stDate = as.Date(stDatetemp, format = '%m/%d/%Y'), stDatetemp = NULL) %>%
-    mutate(stTime = format(strptime(BGN_TIME, format="%H%M"), format = "%H:%M"), BGN_TIME = NULL)
-```
-Transformed start date is stored in variable stDate and start time in stTime
-
 First events with zero property/crop damage and fatalities/injuries are removed from the table for simplicity
 ```{r}
 metaData <- metaData %>%
@@ -34,15 +25,15 @@ metaData <- metaData %>%
 ```
 
 Analyse the relationship between event type and population health
-```{r reducing classes of event type}
-keyType <- paste( c("Flood","Temp.","Wind","Ice","Storm","Rain","Tide","Fire","Fog","Rip Current","Silde","Dry","Wet","Dust","other","HWL","Light"),collapse = "|")
+```{r reducing classes of event type,, cache = TRUE}
+keyType <- paste( c("FLOOD","TEMP.","WIND","ICE","STORM","RAIN","FIRE","FOG","RIP CURRENT","SLIDE","DRY","WET","DUST","OTHER","HWL","LIGHT"),collapse = "|")
 metaData <- metaData %>%
     mutate(EVTYPE = toupper(EVTYPE),
            EVTYPE = str_replace_all(EVTYPE,"WAYTERSPOUT|WATER SPOUT","WATERSPOUT"),
            EVTYPE = str_replace_all(EVTYPE,"TSTM|THUNDERSTORM|TORNADO|TYPHOON|HURRICANE|TROPICAL STORM|FUNNEL|DRY MICROBURST|FLOYD|
                                     |TROPICAL DEPRESSION|WATERSPOUT|WALL CLOUD|GUSTNADO|BURST|TURBULENCE|TORNDAO|LANDSPOUT","STORM"),
            EVTYPE = str_replace_all(EVTYPE,"WINDCHILL|WINTER WEATHER|COOL|WINTER|LOW TEMP|WINTRY|HOT|WARM|HEAT|WARTH|HYPERTHERMIA|
-                                    |HIGH TEMPERATURE|TEMPERATURE|COLD|RECORD","TEMP"),
+                                    |HIGH TEMPERATURE|TEMPERATURE|COLD|RECORD","TEMP."),
            EVTYPE = str_replace_all(EVTYPE,"FLD|URBAN|DAM|STREAM|FLOOODING","FLOOD"),
            EVTYPE = str_replace_all(EVTYPE,"DROUGHT|DRIEST","DRY"),
            EVTYPE = str_replace_all(EVTYPE,"PRECIPITATION|PRECIP|SHOWERS|SHOWER|DRIZZLE","RAIN"),
@@ -56,25 +47,48 @@ metaData <- metaData %>%
            |SWELLS|SEICHE|HIGH SEAS|RISING WATER|HEAVY SEAS|ROUGH SEAS|ROGUE WAVE","HWL"),
            EVTYPE = ifelse(is.na(str_extract(EVTYPE,keyType)),EVTYPE,str_extract(EVTYPE,keyType))
     )
-# unique(metaData$EVTYPE)
+unique(metaData$EVTYPE)
 ```
-All weather phenomenons are reduced to 16 types: Flood, Temp., Wind, Ice, Storm, Rain, Tide, Fire, Fog, Rip Current, Slide, Dry, Wet, Dust, other, High Water Level, Light. The classification might not be accurate but it's simply used as a method in this assignment. After classified, the data will be grouped and each group's relation with population damage will be analysed.
+All weather phenomenons are reduced to 15 types: Flood, Temp., Wind, Ice, Storm, Rain, Fire, Fog, Rip Current, Slide, Dry, Wet, Dust, other, High Water Level, Light. The classification might not be accurate but it's simply used as a method in this assignment. After classified, the data will be grouped and each group's relation with population damage will be analysed.
+First to calculate the economic damage the unit of damage and value should be combined. The unit of damage is recorded in variable: "PROPDMGEXP" and "CROPDMGEXP". Some rows contain abnormal unit are excluded from the dataset.
+```{r}
+metaData <- metaData %>%
+    mutate(CROPDMGEXP = toupper(CROPDMGEXP)) %>%
+    mutate(PROPDMGEXP = toupper(PROPDMGEXP)) %>%
+    filter(grepl(paste( c("K","B","H","M"), collapse = "|"), CROPDMGEXP)) %>%
+    filter(grepl(paste( c("K","B","H","M"), collapse = "|"), PROPDMGEXP)) %>%
+    mutate(unitCrop = sapply(CROPDMGEXP, function(x) 
+        switch(grep(x,c("H","K","M","B")), 100, 1000, 1e+06, 1e+09)),
+           unitProp = sapply(PROPDMGEXP, function(x)
+        switch(grep(x,c("H","K","M","B")), 100, 1000, 1e+06, 1e+09))) %>%
+    mutate(CROPDMG = CROPDMG*unitCrop, PROPDMG = PROPDMG*unitProp)
 
+```
+
+The damage to population health is measured with fatalities and injuries separately and the economic consequences are computed by crop damage and property damage. First both categories and summed.
 ```{r data summarization}
 sumData <- metaData %>%
     group_by(EVTYPE) %>%
     summarise(
-        sumFata = sum(FATALITIES, na.rm = T),
-        sumInju = sum(INJURIES, na.rm = T),
-        sumCrop = sum(CROPDMG, na.rm = T),
-        sumProp = sum(PROPDMG, na.rm = T)
+        healDamg = sum(FATALITIES, na.rm = T) + sum(INJURIES, na.rm = T),
+        econDamg = sum(CROPDMG, na.rm = T) +sum(PROPDMG, na.rm = T)
         )
+sumData <- sumData %>%
+    gather(key = "damageType", value = "damage", healDamg:econDamg)
+    
 ```
-The damage to population health is measured with fatalities and injuries separately and the economic consequences are computed by crop damage and property damage. First both categories and summed.
+
 ```{r Data }
-g <- ggplot(sumData,aes(EVTYPE))
-# g + facet_grid(rows = 3) + geom_bar(data = sumFata:sumProp, position = "dodge") 
-g + geom_bar(aes(weight = sumFata)) 
 
-
+damgLabel <- c("Economic Damage", "Health Damage")
+names(damgLabel) <- c("econDamg", "healDamg")
+png(file = "DamageComparison.png", bg = "transparent",width = 960, height = 480)
+g <- ggplot(sumData, aes(x = EVTYPE, y = damage))
+g + facet_grid(rows = vars(damageType), scales="free",
+               labeller = labeller(damageType = damgLabel)) + 
+    geom_bar(stat="identity", fill = "light blue") 
+dev.off()
 ```
+
+
+tinytex:::is_tinytex()
