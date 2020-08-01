@@ -5,10 +5,12 @@ date: "30/07/2020"
 output: pdf_document
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyr)
 library(dplyr)
+library(stringr)
+library(ggplot2)
 ```
 The data is stored in file "repdata_data_StormData.csv.bz2" and read into variable metaData
 ```{r loading Data, cache = TRUE}
@@ -28,29 +30,51 @@ First events with zero property/crop damage and fatalities/injuries are removed 
 ```{r}
 metaData <- metaData %>%
     mutate(damage = PROPDMG + FATALITIES + INJURIES + CROPDMG) %>%
-    .[-.$damage == 0,]
+    .[.$damage != 0,]
 ```
 
 Analyse the relationship between event type and population health
 ```{r reducing classes of event type}
-keyType <- paste( c("FLOOD","HEAT","COLD","WIND","ICE","STORM","RAIN","TIDE","FROST","SURF","FIRE","FOG","RIP CURRENT","SLIDE","DRY"),collapse = "|")
+keyType <- paste( c("Flood","Temp.","Wind","Ice","Storm","Rain","Tide","Fire","Fog","Rip Current","Silde","Dry","Wet","Dust","other","HWL","Light"),collapse = "|")
 metaData <- metaData %>%
     mutate(EVTYPE = toupper(EVTYPE),
-           EVTYPE = str_replace_all(EVTYPE,"TSTM|THUNDERSTORM|TORNADO|TYPHOON|HURRICANE|TROPICAL STORM|FUNNEL CLOUD|DRY MICROBURST","STORM"),
-           EVTYPE = str_replace_all(EVTYPE,"WINDCHILL|WINTER WEATHER","COLD"),
-           EVTYPE = str_replace_all(EVTYPE,"FLD","FLOOD"),
-           EVTYPE = str_replace_all(EVTYPE,"AVALANCHE","SLIDE"),
-           EVTYPE = str_replace_all(EVTYPE,"HAIL|WINTER STORM|SLEET|SNOW|BLIZZARD|FREEZE|FROST","ICE"),
-           EVTYPE = ifelse(is.na(str_extract(EVTYPE,keyType)),EVTYPE,str_extract(EVTYPE,keyType)),
-           EVTYPE = str_replace_all(EVTYPE,"SURF|TIDE|STORM SURGE","HIGH WATER LEVEL"),
+           EVTYPE = str_replace_all(EVTYPE,"WAYTERSPOUT|WATER SPOUT","WATERSPOUT"),
+           EVTYPE = str_replace_all(EVTYPE,"TSTM|THUNDERSTORM|TORNADO|TYPHOON|HURRICANE|TROPICAL STORM|FUNNEL|DRY MICROBURST|FLOYD|
+                                    |TROPICAL DEPRESSION|WATERSPOUT|WALL CLOUD|GUSTNADO|BURST|TURBULENCE|TORNDAO|LANDSPOUT","STORM"),
+           EVTYPE = str_replace_all(EVTYPE,"WINDCHILL|WINTER WEATHER|COOL|WINTER|LOW TEMP|WINTRY|HOT|WARM|HEAT|WARTH|HYPERTHERMIA|
+                                    |HIGH TEMPERATURE|TEMPERATURE|COLD|RECORD","TEMP"),
+           EVTYPE = str_replace_all(EVTYPE,"FLD|URBAN|DAM|STREAM|FLOOODING","FLOOD"),
+           EVTYPE = str_replace_all(EVTYPE,"DROUGHT|DRIEST","DRY"),
+           EVTYPE = str_replace_all(EVTYPE,"PRECIPITATION|PRECIP|SHOWERS|SHOWER|DRIZZLE","RAIN"),
+           EVTYPE = str_replace_all(EVTYPE,"AVALANCHE|SLUMP|EROSION|EROSIN|AVALANCE","SLIDE"),
+           EVTYPE = str_replace_all(EVTYPE,"VOLCAN|SMOKE","DUST"),
+           EVTYPE = str_replace_all(EVTYPE,"MARINE MISHAP|APACHE COUNTY|MARINE ACCIDENT|HEAVY MIX|DROWNING|[?]|HIGH","OTHER"),
+           EVTYPE = str_replace_all(EVTYPE,"WND","WIND"),
+           EVTYPE = str_replace_all(EVTYPE,"LIGHTING|LIGHTNING|LIGHTS|LIGNTNING","LIGHT"),
+           EVTYPE = str_replace_all(EVTYPE,"HAIL|WINTER STORM|SLEET|SNOW|BLIZZARD|FREEZE|FROST|ICY|GLAZE|FREEZING","ICE"),
+           EVTYPE = str_replace_all(EVTYPE,"SURF|TIDE|STORM SURGE|HIGH WAVES|HIGH WATER|COASTAL SURGE|TSUNAMI|
+           |SWELLS|SEICHE|HIGH SEAS|RISING WATER|HEAVY SEAS|ROUGH SEAS|ROGUE WAVE","HWL"),
+           EVTYPE = ifelse(is.na(str_extract(EVTYPE,keyType)),EVTYPE,str_extract(EVTYPE,keyType))
     )
+# unique(metaData$EVTYPE)
 ```
-All weather phenomenons are reduced to 15 types: Flood, Heat, Cold, Wind, Ice, Storm, Rain, Tide, Frost, High Water Level, Fog, and Rip Current. The classification might be accurate but simply used as a method in this assignment. After classified, the data will be grouped and each group's relation with population damage will be analysed.
+All weather phenomenons are reduced to 16 types: Flood, Temp., Wind, Ice, Storm, Rain, Tide, Fire, Fog, Rip Current, Slide, Dry, Wet, Dust, other, High Water Level, Light. The classification might not be accurate but it's simply used as a method in this assignment. After classified, the data will be grouped and each group's relation with population damage will be analysed.
 
-```{r}
-metaData <- metaData %>%
+```{r data summarization}
+sumData <- metaData %>%
     group_by(EVTYPE) %>%
-    mean(FATALITIES)
+    summarise(
+        sumFata = sum(FATALITIES, na.rm = T),
+        sumInju = sum(INJURIES, na.rm = T),
+        sumCrop = sum(CROPDMG, na.rm = T),
+        sumProp = sum(PROPDMG, na.rm = T)
+        )
+```
+The damage to population health is measured with fatalities and injuries separately and the economic consequences are computed by crop damage and property damage. First both categories and summed.
+```{r Data }
+g <- ggplot(sumData,aes(EVTYPE))
+# g + facet_grid(rows = 3) + geom_bar(data = sumFata:sumProp, position = "dodge") 
+g + geom_bar(aes(weight = sumFata)) 
+
 
 ```
-
