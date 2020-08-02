@@ -12,20 +12,26 @@ library(dplyr)
 library(stringr)
 library(ggplot2)
 ```
+TITLE: Analysis of Damage Cost by Weather Phenomenon based NOAA Storm data
+
+Processing Methods: First events without actual damage are removed for efficiency, then types of events are categorized into 15 classes manually. Damages are calculated in two ways, the sum of each type of event and the average damage costed by one single events within each type. While calculating the damage, the unit of recorded damage should be considered.
+
+ANALYSIS:
+
 The data is stored in file "repdata_data_StormData.csv.bz2" and read into variable metaData
 ```{r loading Data, cache = TRUE}
 metaData <- read.csv("repdata_data_StormData.csv.bz2")
 ```
 
 First events with zero property/crop damage and fatalities/injuries are removed from the table for simplicity
-```{r}
+```{r Remove events without actual damages}
 metaData <- metaData %>%
     mutate(damage = PROPDMG + FATALITIES + INJURIES + CROPDMG) %>%
     .[.$damage != 0,]
 ```
 
 Analyse the relationship between event type and population health
-```{r reducing classes of event type,, cache = TRUE}
+```{r reducing classes of event type, cache = TRUE}
 keyType <- paste( c("FLOOD","TEMP.","WIND","ICE","STORM","RAIN","FIRE","FOG","RIP CURRENT","SLIDE","DRY","WET","DUST","OTHER","HWL","LIGHT"),collapse = "|")
 metaData <- metaData %>%
     mutate(EVTYPE = toupper(EVTYPE),
@@ -51,7 +57,7 @@ unique(metaData$EVTYPE)
 ```
 All weather phenomenons are reduced to 15 types: Flood, Temp., Wind, Ice, Storm, Rain, Fire, Fog, Rip Current, Slide, Dry, Wet, Dust, other, High Water Level, Light. The classification might not be accurate but it's simply used as a method in this assignment. After classified, the data will be grouped and each group's relation with population damage will be analysed.
 First to calculate the economic damage the unit of damage and value should be combined. The unit of damage is recorded in variable: "PROPDMGEXP" and "CROPDMGEXP". Some rows contain abnormal unit are excluded from the dataset.
-```{r}
+```{r calculating the damage by unit, cache = TRUE}
 metaData <- metaData %>%
     mutate(CROPDMGEXP = toupper(CROPDMGEXP)) %>%
     mutate(PROPDMGEXP = toupper(PROPDMGEXP)) %>%
@@ -66,7 +72,7 @@ metaData <- metaData %>%
 ```
 
 The damage to population health is measured with fatalities and injuries separately and the economic consequences are computed by crop damage and property damage. First both categories and summed.
-```{r data summarization}
+```{r summing data by type}
 sumData <- metaData %>%
     group_by(EVTYPE) %>%
     summarise(
@@ -78,17 +84,37 @@ sumData <- sumData %>%
     
 ```
 
-```{r Data }
-
+```{r presenting sum of damage, fig.height = 4, fig.width = 8, fig.align = "center"}
 damgLabel <- c("Economic Damage", "Health Damage")
 names(damgLabel) <- c("econDamg", "healDamg")
-png(file = "DamageComparison.png", bg = "transparent",width = 960, height = 480)
+
+theme_update(plot.title = element_text(hjust = 0.5))
 g <- ggplot(sumData, aes(x = EVTYPE, y = damage))
 g + facet_grid(rows = vars(damageType), scales="free",
                labeller = labeller(damageType = damgLabel)) + 
-    geom_bar(stat="identity", fill = "light blue") 
-dev.off()
+    geom_bar(stat="identity", fill = "light blue") +
+    ggtitle("Sum of damage of each type of event by health and economy")
+dev.copy(png,"SumDamageComparison.png",width = 960, height = 480)
 ```
-
-
-tinytex:::is_tinytex()
+As it is shown in the figure, the type of event that has the highest health damage is flooding, and the storm type of event costs the most on economy. However this is just the sum of all events within one type, while the mean of all events is also worth investigating. Therefore the mean of each type of event is analyzed in the following.
+```{r averaging data by type}
+aveData <- metaData %>%
+    group_by(EVTYPE) %>%
+    summarise(
+        healDamg = mean(FATALITIES, na.rm = T) + mean(INJURIES, na.rm = T),
+        econDamg = mean(CROPDMG, na.rm = T) + mean(PROPDMG, na.rm = T)
+        )
+aveData <- aveData %>%
+    gather(key = "damageType", value = "damage", healDamg:econDamg)
+    
+```
+And the result of the damage averaged by each event is present in the following.
+```{r presenting averaged damage, fig.height = 4, fig.width = 8, fig.align = "center"}
+g <- ggplot(aveData, aes(x = EVTYPE, y = damage))
+g + facet_grid(rows = vars(damageType), scales="free",
+               labeller = labeller(damageType = damgLabel)) + 
+    geom_bar(stat="identity", fill = "light blue") +
+    ggtitle("Average of damage of each type of event by health and economy")
+dev.copy(png,"AveDamageComparison.png",width = 960, height = 480)
+```
+As it is shown in the figure, the High Water Level damage has the most damage on both population health and economy. This suggest although flooding and storm happen more frequently and cost more in total, the damage resulted by one single High Water Level event is far higher.
